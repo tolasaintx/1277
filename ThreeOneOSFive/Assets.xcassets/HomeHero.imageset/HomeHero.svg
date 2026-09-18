@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1170" height="708" viewBox="0 0 1170 708">
+  <defs>
+    <radialGradient id="bg" cx="66%" cy="38%" r="65%">
+      <stop offset="0" stop-color="#25282d"/>
+      <stop offset="0.5" stop-color="#090a0c"/>
+      <stop offset="1" stop-color="#000"/>
+    </radialGradient>
+    <linearGradient id="hair" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f1f2f3"/>
+      <stop offset="0.46" stop-color="#969ba1"/>
+      <stop offset="1" stop-color="#282b30"/>
+    </linearGradient>
+    <linearGradient id="skin" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#9da2a8"/>
+      <stop offset="0.55" stop-color="#42464c"/>
+      <stop offset="1" stop-color="#101215"/>
+    </linearGradient>
+    <linearGradient id="coat" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#202328"/>
+      <stop offset="1" stop-color="#020303"/>
+    </linearGradient>
+    <filter id="glow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="soft"><feGaussianBlur stdDeviation="13"/></filter>
+  </defs>
+  <rect width="1170" height="708" fill="url(#bg)"/>
+  <g opacity=".22" fill="#9da2aa" filter="url(#soft)">
+    <path d="M365 65l242 94-202 20 151 76-238-36 130 102-242-83z"/>
+    <path d="M949 109l-198 104 218-30-152 98 247-69-123 123 189-94z"/>
+    <path d="M325 319l231 70-256 25 207 66-294-13z"/>
+  </g>
+  <g fill="#30343a" opacity=".75">
+    <path d="M581 128L497 37l139 67-25-88 82 89 34-97 34 111 99-78-58 112 142-46-116 93z"/>
+    <path d="M615 140L564 25l106 87 11-103 52 108 68-95-23 126 129-83-83 137z"/>
+  </g>
+  <path d="M588 146c31-66 123-92 199-53 82 41 114 139 80 229-17 45-53 90-87 117-26 21-59 24-91 4-66-42-109-116-117-191-4-42 2-76 16-106z" fill="url(#skin)"/>
+  <path d="M565 182c23-86 123-139 211-110 66 22 112 82 119 146-31-34-65-55-104-63 31 35 38 65 38 65-55-47-100-69-150-71 25 32 34 58 34 58-45-31-92-41-148-25z" fill="url(#hair)"/>
+  <g fill="url(#hair)">
+    <path d="M590 170L491 72l149 70-43-125 91 117 9-134 48 132 77-117-37 142 127-95-88 134z"/>
+    <path d="M604 147l-9-131 62 112 46-121 8 132 94-104-56 133 136-65-105 111z" opacity=".88"/>
+    <path d="M785 139l132-77-92 119 151-35-132 86 144 9-151 42z" opacity=".58"/>
+  </g>
+  <path d="M566 242c81-38 186-40 281 13-22 28-64 58-103 68-70 19-129-11-178-81z" fill="#08090a" opacity=".86"/>
+  <path d="M660 248c32-19 67-20 100-6-17 23-37 34-61 35-15 0-27-9-39-29z" fill="#edfaff" filter="url(#glow)"/>
+  <path d="M668 250c28-12 55-13 81-3-14 12-29 19-48 20-14 1-23-5-33-17z" fill="#fff"/>
+  <path d="M818 258c17 64-6 131-67 174 49-13 101-62 121-109z" fill="#0b0c0e" opacity=".8"/>
+  <path d="M463 696c-5-103 13-207 79-283 57-66 136-92 216-62 105-69 213-43 279 36 52 62 70 178 66 309z" fill="url(#coat)"/>
+  <path d="M689 397c-45 20-81 62-112 119 77-37 158-50 239-42-25-36-70-71-127-77z" fill="#363a40" opacity=".55"/>
+  <path d="M803 358c75-44 170-19 229 49-92-18-161 2-231 50z" fill="#111317"/>
+  <g fill="none" stroke-linecap="round" opacity=".72">
+    <path d="M530 365c-55 15-111 55-144 104" stroke="#8f949a" stroke-width="28"/>
+    <path d="M399 452c39-68 79-109 134-130" stroke="#555a61" stroke-width="31"/>
+    <path d="M382 467l-38-53M409 441l-30-67M441 410l-17-68M474 384l-1-67" stroke="#a5a9ad" stroke-width="18"/>
+  </g>
+  <path d="M0 620c248-46 429-35 568 24L0 708z" fill="#000" opacity=".76"/>
+  <path d="M1170 601c-178-33-313-22-415 44l415 63z" fill="#000" opacity=".72"/>
+  <rect width="1170" height="708" fill="none" stroke="#fff" stroke-opacity=".025" stroke-width="2"/>
+</svg>

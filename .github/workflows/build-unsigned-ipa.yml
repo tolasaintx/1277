@@ -1,0 +1,71 @@
+name: Build unsigned IPA
+
+on:
+  push:
+    branches:
+      - kiro/home-redesign-ipa
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unsigned-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build 3105
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4.2.2
+
+      - name: Build unsigned app
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUILD_DIR="${RUNNER_TEMP}/3105-build"
+          rm -rf "${BUILD_DIR}"
+
+          xcodebuild \
+            -project ThreeOneOSFive.xcodeproj \
+            -target 3105 \
+            -configuration Release \
+            -sdk iphoneos \
+            CONFIGURATION_BUILD_DIR="${BUILD_DIR}" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            ONLY_ACTIVE_ARCH=NO \
+            clean build
+
+          test -d "${BUILD_DIR}/3105.app"
+
+      - name: Package IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUILD_DIR="${RUNNER_TEMP}/3105-build"
+          STAGE_DIR="${RUNNER_TEMP}/3105-ipa"
+          OUTPUT="${GITHUB_WORKSPACE}/3105-unsigned.ipa"
+          rm -rf "${STAGE_DIR}" "${OUTPUT}"
+          mkdir -p "${STAGE_DIR}/Payload"
+          ditto "${BUILD_DIR}/3105.app" "${STAGE_DIR}/Payload/3105.app"
+          (
+            cd "${STAGE_DIR}"
+            /usr/bin/zip -qry "${OUTPUT}" Payload
+          )
+          /usr/bin/zip -T "${OUTPUT}"
+          /usr/bin/unzip -l "${OUTPUT}" | grep -q "Payload/3105.app/Info.plist"
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: 3105-unsigned
+          path: 3105-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0

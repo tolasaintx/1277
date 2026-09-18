@@ -2,8 +2,8 @@ import SwiftUI
 
 struct RepositoryHomeView: View {
     @Environment(\.appLanguage) private var language
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var store: PackageRepositoryStore
+    @EnvironmentObject private var appState: AppState
     @State private var feed: [RepositoryPackageRecord] = []
 
     let onOpenSettings: () -> Void
@@ -11,29 +11,28 @@ struct RepositoryHomeView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 28) {
-                    if feed.isEmpty {
-                        emptyContent
-                    } else {
-                        featuredFeed
-                        recentPackages
-                    }
-
+            ScrollView(showsIndicators: false) {
+                LazyVStack(spacing: 12) {
+                    heroBanner
+                    packageCards
+                    deviceSummary
+                    resourceLinks
+                    footer
                 }
                 .frame(maxWidth: 720)
                 .frame(maxWidth: .infinity)
-                .padding(.horizontal, AppTheme.contentCardInset)
-                .padding(.top, 16)
-                .padding(.bottom, 32)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 36)
             }
-            .background(Color(uiColor: .systemGroupedBackground))
+            .background(Color.black.ignoresSafeArea())
             .refreshable {
                 await store.refreshAllAndWait()
                 rebuildFeed()
             }
-            .navigationTitle("3105")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 AppUtilityToolbar(
                     language: language,
@@ -56,98 +55,282 @@ struct RepositoryHomeView: View {
         }
     }
 
-    private var emptyContent: some View {
-        marketplaceEmpty(
-            systemImage: store.sources.isEmpty
-                ? "shippingbox.and.arrow.backward"
-                : "shippingbox",
-            titleKey: store.sources.isEmpty
-                ? "repository.no_sources_title"
-                : "repository.no_packages_title",
-            messageKey: store.sources.isEmpty
-                ? "repository.home_no_sources_message"
-                : "repository.no_packages_message"
-        )
-    }
+    private var heroBanner: some View {
+        ZStack(alignment: .topLeading) {
+            Image("HomeHero")
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: .infinity)
+                .frame(height: 236)
+                .clipped()
+                .accessibilityHidden(true)
 
-    private var featuredFeed: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("repository.for_you")
+            LinearGradient(
+                colors: [.black.opacity(0.12), .clear, .black.opacity(0.7)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .accessibilityHidden(true)
 
-            GeometryReader { proxy in
-                let cardWidth = featuredCardWidth(availableWidth: proxy.size.width)
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(alignment: .top, spacing: featuredCardSpacing) {
-                        ForEach(Array(feed.prefix(featuredPackageCount))) { record in
-                            NavigationLink(value: record) {
-                                RepositoryFeaturedCard(
-                                    record: record,
-                                    width: cardWidth,
-                                    height: featuredCardHeight
-                                )
-                            }
-                            .buttonStyle(RepositoryCardButtonStyle())
-                        }
-                    }
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("3 1 0 5")
+                    Text("PLAY BEYOND LIMITS")
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 5) {
+                    Text("SIMPLE")
+                    Text("SAFE")
+                    Text("STABLE")
+                    Capsule()
+                        .fill(.white.opacity(0.65))
+                        .frame(width: 24, height: 1)
+                        .padding(.top, 2)
                 }
             }
-            .frame(height: featuredCardHeight)
+            .font(.system(size: 7, weight: .semibold, design: .monospaced))
+            .tracking(3)
+            .foregroundStyle(.white.opacity(0.86))
+            .padding(.horizontal, 14)
+            .padding(.top, 22)
+
+            Text("三\n一\n〇\n五")
+                .font(.system(size: 21, weight: .black, design: .serif))
+                .foregroundStyle(.white.opacity(0.48))
+                .lineSpacing(-3)
+                .padding(.leading, 19)
+                .padding(.top, 86)
+                .accessibilityHidden(true)
         }
+        .frame(height: 236)
+        .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
     }
 
     @ViewBuilder
-    private var recentPackages: some View {
-        let remaining = Array(feed.dropFirst(featuredPackageCount))
-        if !remaining.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                sectionHeader("repository.more_patches")
-
-                VStack(spacing: 0) {
-                    ForEach(
-                        Array(remaining.enumerated()),
-                        id: \.element.id
-                    ) { index, record in
-                        NavigationLink(value: record) {
-                            HStack(spacing: 12) {
-                                RepositoryPackageRow(record: record)
-                                Spacer(minLength: 8)
-                                Image(systemName: "chevron.right")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.tertiary)
-                                    .accessibilityHidden(true)
-                            }
-                            .padding(.horizontal, AppTheme.contentCardPadding)
-                            .padding(.vertical, 8)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(RepositoryCardButtonStyle())
-
-                        if index < remaining.count - 1 {
-                            Divider()
-                                .padding(.leading, 68)
-                        }
+    private var packageCards: some View {
+        if feed.isEmpty {
+            marketplaceEmpty(
+                systemImage: store.sources.isEmpty
+                    ? "shippingbox.and.arrow.backward"
+                    : "shippingbox",
+                titleKey: store.sources.isEmpty
+                    ? "repository.no_sources_title"
+                    : "repository.no_packages_title",
+                messageKey: store.sources.isEmpty
+                    ? "repository.home_no_sources_message"
+                    : "repository.no_packages_message"
+            )
+        } else {
+            VStack(spacing: 10) {
+                ForEach(Array(feed.prefix(2))) { record in
+                    NavigationLink(value: record) {
+                        packageCard(record)
                     }
+                    .buttonStyle(.plain)
                 }
-                .background(
-                    Color(uiColor: .systemBackground),
-                    in: RoundedRectangle(
-                        cornerRadius: AppTheme.contentCardCornerRadius,
-                        style: .continuous
-                    )
-                )
-                .overlay {
-                    AppCardBorder()
+
+                if feed.count > 2 {
+                    DisclosureGroup {
+                        VStack(spacing: 10) {
+                            ForEach(Array(feed.dropFirst(2))) { record in
+                                NavigationLink(value: record) {
+                                    packageCard(record)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.top, 10)
+                    } label: {
+                        Text(language.text("repository.more_patches"))
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                    .tint(.white.opacity(0.55))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
                 }
             }
         }
     }
 
-    private func sectionHeader(_ key: String) -> some View {
-        Text(language.text(key))
-            .font(.title3.weight(.bold))
-            .foregroundStyle(.primary)
-            .textCase(nil)
+    private func packageCard(_ record: RepositoryPackageRecord) -> some View {
+        HStack(spacing: 13) {
+            RepositoryPackageIcon(package: record.package, size: 54)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(record.package.name)
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                Text(record.package.summary)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.55))
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 42, height: 42)
+                .background(.white.opacity(0.045), in: Circle())
+                .accessibilityHidden(true)
+        }
+        .padding(10)
+        .background(dashboardCardBackground)
+        .contentShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+    }
+
+    private var deviceSummary: some View {
+        HStack(spacing: 0) {
+            metric(
+                icon: "iphone.gen3",
+                title: "Device",
+                value: deviceDisplayName
+            )
+
+            metricDivider
+
+            metric(
+                icon: "apple.logo",
+                title: "iOS Version",
+                value: AppInfo.osVersion
+            )
+
+            metricDivider
+
+            metric(
+                icon: "checkmark.shield",
+                title: "Status",
+                value: language.text(
+                    appState.isSupported ? "settings.supported" : "settings.unsupported"
+                )
+            )
+        }
+        .padding(.vertical, 18)
+        .background(dashboardCardBackground)
+    }
+
+    private var deviceDisplayName: String {
+        let identifier = AppInfo.displayMachineName
+        if identifier.hasPrefix("iPhone") { return "iPhone" }
+        if identifier.hasPrefix("iPad") { return "iPad" }
+        return identifier
+    }
+
+    private func metric(icon: String, title: String, value: String) -> some View {
+        VStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 22, weight: .medium))
+                .foregroundStyle(.white)
+                .frame(height: 25)
+            Text(title)
+                .font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.5))
+            Text(value)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(
+                    title == "Status"
+                        ? (appState.isSupported ? Color.green : Color.red)
+                        : Color.white
+                )
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var metricDivider: some View {
+        Rectangle()
+            .fill(.white.opacity(0.17))
+            .frame(width: 1, height: 67)
+            .accessibilityHidden(true)
+    }
+
+    private var resourceLinks: some View {
+        VStack(spacing: 10) {
+            dashboardLink(
+                title: "Support",
+                subtitle: "Get help if you have any issue",
+                systemImage: "headphones",
+                destination: "https://github.com/YangJiiii/3105/issues"
+            )
+            dashboardLink(
+                title: "Telegram Channel",
+                subtitle: "Get latest updates and announcements",
+                systemImage: "paperplane.fill",
+                destination: "https://t.me/ioscrackvn"
+            )
+        }
+    }
+
+    private func dashboardLink(
+        title: String,
+        subtitle: String,
+        systemImage: String,
+        destination: String
+    ) -> some View {
+        Link(destination: URL(string: destination)!) {
+            HStack(spacing: 14) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 50, height: 50)
+                    .background(Color.black, in: Circle())
+                    .overlay {
+                        Circle().strokeBorder(.white.opacity(0.08), lineWidth: 1)
+                    }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(title)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(.white)
+                    Text(subtitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.65))
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(dashboardCardBackground)
+            .contentShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+        }
+        .accessibilityLabel("\(title). \(subtitle)")
+    }
+
+    private var footer: some View {
+        VStack(spacing: 7) {
+            Spacer(minLength: 96)
+            Text("3 1 0 5")
+            Text("PLAY BEYOND LIMITS  •  \(AppUpdateChecker.currentVersion)")
+            Capsule()
+                .fill(.white)
+                .frame(width: 28, height: 2)
+                .padding(.top, 3)
+        }
+        .font(.system(size: 7, weight: .semibold, design: .monospaced))
+        .tracking(3)
+        .foregroundStyle(.white.opacity(0.72))
+        .frame(maxWidth: .infinity)
+    }
+
+    private var dashboardCardBackground: some View {
+        RoundedRectangle(cornerRadius: 15, style: .continuous)
+            .fill(Color.white.opacity(0.035))
+            .overlay {
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.075), lineWidth: 0.7)
+            }
     }
 
     private func marketplaceEmpty(
@@ -157,64 +340,24 @@ struct RepositoryHomeView: View {
     ) -> some View {
         VStack(spacing: 12) {
             Image(systemName: systemImage)
-                .font(.system(size: AppTheme.emptyIconSize, weight: .light))
-                .foregroundStyle(AppTheme.accent)
+                .font(.system(size: 32, weight: .light))
+                .foregroundStyle(.white)
             Text(language.text(titleKey))
                 .font(.headline)
+                .foregroundStyle(.white)
             Text(language.text(messageKey))
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.55))
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 20)
-        .padding(.vertical, 48)
-        .background(
-            Color(uiColor: .systemBackground),
-            in: RoundedRectangle(
-                cornerRadius: AppTheme.contentCardCornerRadius,
-                style: .continuous
-            )
-        )
-        .overlay {
-            AppCardBorder()
-        }
+        .padding(.vertical, 32)
+        .background(dashboardCardBackground)
     }
 
     private func rebuildFeed() {
         feed = PackageRepositoryFeedPolicy.home(store.packages)
-    }
-
-    private var featuredPackageCount: Int {
-        min(feed.count, 3)
-    }
-
-    private var featuredCardSpacing: CGFloat { 10 }
-
-    private var featuredCardHeight: CGFloat {
-        if dynamicTypeSize.isAccessibilitySize {
-            return 180
-        }
-        if dynamicTypeSize >= .xxLarge {
-            return 140
-        }
-        return 112
-    }
-
-    private func featuredCardWidth(availableWidth: CGFloat) -> CGFloat {
-        if dynamicTypeSize.isAccessibilitySize {
-            return min(320, max(260, availableWidth * 0.82))
-        }
-        if dynamicTypeSize >= .xxLarge {
-            return min(
-                260,
-                max(200, (availableWidth - featuredCardSpacing) / 1.45)
-            )
-        }
-        return min(
-            240,
-            max(140, (availableWidth - featuredCardSpacing) / 2)
-        )
     }
 }
 
