@@ -1,4 +1,4 @@
-name: Build unsigned IPA
+name: Build IPA
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: unsigned-ipa-${{ github.ref }}
+  group: ipa-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -18,6 +18,11 @@ jobs:
     name: Build 3105
     runs-on: macos-15
     timeout-minutes: 30
+    env:
+      EXPECTED_SIGNED_BUNDLE_ID: app.turquoise9304.rambutan2798
+      EXPECTED_SIGNING_TEAM_ID: V725U4A8C8
+      EXPECTED_PROFILE_UUID: 1dbf3ee4-9f8a-4a37-9551-a8dd8d1ba231
+      SIGNING_KEYCHAIN_PATH: ${{ runner.temp }}/3105-signing.keychain-db
 
     steps:
       - name: Check out source
@@ -44,12 +49,12 @@ jobs:
 
           test -d "${BUILD_DIR}/3105.app"
 
-      - name: Package IPA
+      - name: Package unsigned IPA
         shell: bash
         run: |
           set -euo pipefail
           BUILD_DIR="${RUNNER_TEMP}/3105-build"
-          STAGE_DIR="${RUNNER_TEMP}/3105-ipa"
+          STAGE_DIR="${RUNNER_TEMP}/3105-unsigned-ipa"
           OUTPUT="${GITHUB_WORKSPACE}/3105-unsigned.ipa"
           rm -rf "${STAGE_DIR}" "${OUTPUT}"
           mkdir -p "${STAGE_DIR}/Payload"
@@ -61,11 +66,187 @@ jobs:
           /usr/bin/zip -T "${OUTPUT}"
           /usr/bin/unzip -l "${OUTPUT}" | grep -q "Payload/3105.app/Info.plist"
 
-      - name: Upload IPA
+      - name: Prepare signing identity and profile
+        shell: bash
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${CERTIFICATE_BASE64}" || -z "${CERTIFICATE_PASSWORD}" || -z "${PROVISIONING_PROFILE_BASE64}" ]]; then
+            echo "Required iOS signing secrets are missing." >&2
+            exit 1
+          fi
+
+          CERTIFICATE_PATH="${RUNNER_TEMP}/signing-certificate.p12"
+          PROFILE_PATH="${RUNNER_TEMP}/signing-profile.mobileprovision"
+          PROFILE_PLIST="${RUNNER_TEMP}/signing-profile.plist"
+          ENTITLEMENTS_PATH="${RUNNER_TEMP}/signing-entitlements.plist"
+          PROFILE_HASHES_PATH="${RUNNER_TEMP}/profile-certificate-hashes.txt"
+          KEYCHAIN_PASSWORD="$(uuidgen)$(uuidgen)"
+          echo "::add-mask::${KEYCHAIN_PASSWORD}"
+
+          printf '%s' "${CERTIFICATE_BASE64}" | /usr/bin/base64 --decode > "${CERTIFICATE_PATH}"
+          printf '%s' "${PROVISIONING_PROFILE_BASE64}" | /usr/bin/base64 --decode > "${PROFILE_PATH}"
+
+          security create-keychain -p "${KEYCHAIN_PASSWORD}" "${SIGNING_KEYCHAIN_PATH}"
+          security set-keychain-settings -lut 21600 "${SIGNING_KEYCHAIN_PATH}"
+          security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${SIGNING_KEYCHAIN_PATH}"
+          security import "${CERTIFICATE_PATH}" \
+            -k "${SIGNING_KEYCHAIN_PATH}" \
+            -P "${CERTIFICATE_PASSWORD}" \
+            -f pkcs12 \
+            -x \
+            -T /usr/bin/codesign
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "${KEYCHAIN_PASSWORD}" \
+            "${SIGNING_KEYCHAIN_PATH}"
+
+          security cms -D -i "${PROFILE_PATH}" > "${PROFILE_PLIST}"
+
+          python3 - "${PROFILE_PLIST}" "${ENTITLEMENTS_PATH}" "${PROFILE_HASHES_PATH}" "${GITHUB_ENV}" <<'PY'
+          import hashlib
+          import os
+          import plistlib
+          import sys
+          from datetime import datetime, timezone
+
+          profile_path, entitlements_path, hashes_path, env_path = sys.argv[1:]
+          with open(profile_path, "rb") as handle:
+              profile = plistlib.load(handle)
+
+          entitlements = profile.get("Entitlements", {})
+          team_ids = profile.get("TeamIdentifier", [])
+          if not team_ids:
+              raise SystemExit("Provisioning profile has no TeamIdentifier")
+          team_id = team_ids[0]
+          application_identifier = entitlements.get("application-identifier", "")
+          prefix = team_id + "."
+          if not application_identifier.startswith(prefix):
+              raise SystemExit("Provisioning profile application identifier is invalid")
+          bundle_id = application_identifier[len(prefix):]
+
+          if team_id != os.environ["EXPECTED_SIGNING_TEAM_ID"]:
+              raise SystemExit("Provisioning profile team does not match the build contract")
+          if bundle_id != os.environ["EXPECTED_SIGNED_BUNDLE_ID"]:
+              raise SystemExit("Provisioning profile bundle ID does not match the build contract")
+          if profile.get("UUID") != os.environ["EXPECTED_PROFILE_UUID"]:
+              raise SystemExit("Provisioning profile UUID does not match the build contract")
+          if profile.get("ProvisionsAllDevices") or not profile.get("ProvisionedDevices"):
+              raise SystemExit("An Ad Hoc device provisioning profile is required")
+          if entitlements.get("get-task-allow", False):
+              raise SystemExit("A development provisioning profile is not allowed")
+
+          expiration = profile.get("ExpirationDate")
+          if expiration is None or expiration.replace(tzinfo=timezone.utc) <= datetime.now(timezone.utc):
+              raise SystemExit("Provisioning profile is expired")
+
+          with open(entitlements_path, "wb") as handle:
+              plistlib.dump(entitlements, handle, fmt=plistlib.FMT_XML, sort_keys=True)
+          with open(hashes_path, "w", encoding="utf-8") as handle:
+              for certificate in profile.get("DeveloperCertificates", []):
+                  handle.write(hashlib.sha1(certificate).hexdigest().upper() + "\n")
+
+          with open(env_path, "a", encoding="utf-8") as handle:
+              handle.write(f"SIGNING_PROFILE_UUID={profile['UUID']}\n")
+              handle.write(f"SIGNED_BUNDLE_ID={bundle_id}\n")
+          print(f"Validated Ad Hoc profile for {bundle_id}, expiring {expiration.isoformat()}")
+          PY
+
+          SIGNING_IDENTITY=""
+          while IFS= read -r certificate_hash; do
+            if security find-identity -v -p codesigning "${SIGNING_KEYCHAIN_PATH}" | grep -q "${certificate_hash}"; then
+              SIGNING_IDENTITY="${certificate_hash}"
+              break
+            fi
+          done < "${PROFILE_HASHES_PATH}"
+          if [[ -z "${SIGNING_IDENTITY}" ]]; then
+            echo "The imported certificate is not authorized by the provisioning profile." >&2
+            exit 1
+          fi
+
+          mkdir -p "${HOME}/Library/MobileDevice/Provisioning Profiles"
+          cp "${PROFILE_PATH}" \
+            "${HOME}/Library/MobileDevice/Provisioning Profiles/${EXPECTED_PROFILE_UUID}.mobileprovision"
+
+          {
+            echo "SIGNING_IDENTITY=${SIGNING_IDENTITY}"
+            echo "SIGNING_ENTITLEMENTS_PATH=${ENTITLEMENTS_PATH}"
+          } >> "${GITHUB_ENV}"
+
+      - name: Sign and package IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUILD_DIR="${RUNNER_TEMP}/3105-build"
+          STAGE_DIR="${RUNNER_TEMP}/3105-signed-ipa"
+          SIGNED_APP="${STAGE_DIR}/Payload/3105.app"
+          OUTPUT="${GITHUB_WORKSPACE}/3105-signed.ipa"
+          rm -rf "${STAGE_DIR}" "${OUTPUT}"
+          mkdir -p "${STAGE_DIR}/Payload"
+          ditto "${BUILD_DIR}/3105.app" "${SIGNED_APP}"
+
+          /usr/libexec/PlistBuddy \
+            -c "Set :CFBundleIdentifier ${SIGNED_BUNDLE_ID}" \
+            "${SIGNED_APP}/Info.plist"
+          cp "${HOME}/Library/MobileDevice/Provisioning Profiles/${SIGNING_PROFILE_UUID}.mobileprovision" \
+            "${SIGNED_APP}/embedded.mobileprovision"
+
+          /usr/bin/codesign \
+            --force \
+            --sign "${SIGNING_IDENTITY}" \
+            --keychain "${SIGNING_KEYCHAIN_PATH}" \
+            --entitlements "${SIGNING_ENTITLEMENTS_PATH}" \
+            --timestamp=none \
+            --generate-entitlement-der \
+            "${SIGNED_APP}"
+
+          /usr/bin/codesign --verify --strict --verbose=2 "${SIGNED_APP}"
+          ACTUAL_BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${SIGNED_APP}/Info.plist")"
+          test "${ACTUAL_BUNDLE_ID}" = "${EXPECTED_SIGNED_BUNDLE_ID}"
+          test -f "${SIGNED_APP}/embedded.mobileprovision"
+          test -d "${SIGNED_APP}/_CodeSignature"
+
+          (
+            cd "${STAGE_DIR}"
+            /usr/bin/zip -qry "${OUTPUT}" Payload
+          )
+          /usr/bin/zip -T "${OUTPUT}"
+          /usr/bin/unzip -l "${OUTPUT}" | grep -q "Payload/3105.app/embedded.mobileprovision"
+          /usr/bin/unzip -l "${OUTPUT}" | grep -q "Payload/3105.app/_CodeSignature/CodeResources"
+
+      - name: Clean up signing credentials
+        if: always()
+        shell: bash
+        run: |
+          rm -f "${HOME}/Library/MobileDevice/Provisioning Profiles/${EXPECTED_PROFILE_UUID}.mobileprovision"
+          if [[ -f "${SIGNING_KEYCHAIN_PATH}" ]]; then
+            security delete-keychain "${SIGNING_KEYCHAIN_PATH}" || true
+          fi
+          rm -f \
+            "${RUNNER_TEMP}/signing-certificate.p12" \
+            "${RUNNER_TEMP}/signing-profile.mobileprovision" \
+            "${RUNNER_TEMP}/signing-profile.plist" \
+            "${RUNNER_TEMP}/signing-entitlements.plist" \
+            "${RUNNER_TEMP}/profile-certificate-hashes.txt"
+
+      - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4.6.2
         with:
           name: 3105-unsigned
           path: 3105-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Upload signed IPA
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: 3105-signed
+          path: 3105-signed.ipa
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
