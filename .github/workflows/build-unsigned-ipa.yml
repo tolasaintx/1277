@@ -22,7 +22,6 @@ jobs:
       EXPECTED_SIGNED_BUNDLE_ID: app.turquoise9304.rambutan2798
       EXPECTED_SIGNING_TEAM_ID: V725U4A8C8
       EXPECTED_PROFILE_UUID: 1dbf3ee4-9f8a-4a37-9551-a8dd8d1ba231
-      SIGNING_KEYCHAIN_PATH: ${{ runner.temp }}/3105-signing.keychain-db
 
     steps:
       - name: Check out source
@@ -84,6 +83,7 @@ jobs:
           PROFILE_PLIST="${RUNNER_TEMP}/signing-profile.plist"
           ENTITLEMENTS_PATH="${RUNNER_TEMP}/signing-entitlements.plist"
           PROFILE_HASHES_PATH="${RUNNER_TEMP}/profile-certificate-hashes.txt"
+          SIGNING_KEYCHAIN_PATH="${RUNNER_TEMP}/3105-signing.keychain-db"
           KEYCHAIN_PASSWORD="$(uuidgen)$(uuidgen)"
           echo "::add-mask::${KEYCHAIN_PASSWORD}"
 
@@ -175,6 +175,7 @@ jobs:
           {
             echo "SIGNING_IDENTITY=${SIGNING_IDENTITY}"
             echo "SIGNING_ENTITLEMENTS_PATH=${ENTITLEMENTS_PATH}"
+            echo "SIGNING_KEYCHAIN_PATH=${SIGNING_KEYCHAIN_PATH}"
           } >> "${GITHUB_ENV}"
 
       - name: Sign and package IPA
@@ -222,9 +223,10 @@ jobs:
         if: always()
         shell: bash
         run: |
+          KEYCHAIN_PATH="${RUNNER_TEMP}/3105-signing.keychain-db"
           rm -f "${HOME}/Library/MobileDevice/Provisioning Profiles/${EXPECTED_PROFILE_UUID}.mobileprovision"
-          if [[ -f "${SIGNING_KEYCHAIN_PATH}" ]]; then
-            security delete-keychain "${SIGNING_KEYCHAIN_PATH}" || true
+          if [[ -f "${KEYCHAIN_PATH}" ]]; then
+            security delete-keychain "${KEYCHAIN_PATH}" || true
           fi
           rm -f \
             "${RUNNER_TEMP}/signing-certificate.p12" \
