@@ -83,9 +83,11 @@ jobs:
           PROFILE_PLIST="${RUNNER_TEMP}/signing-profile.plist"
           ENTITLEMENTS_PATH="${RUNNER_TEMP}/signing-entitlements.plist"
           PROFILE_HASHES_PATH="${RUNNER_TEMP}/profile-certificate-hashes.txt"
+          IDENTITY_PEM_PATH="${RUNNER_TEMP}/signing-identity.pem"
           SIGNING_KEYCHAIN_PATH="${RUNNER_TEMP}/3105-signing.keychain-db"
           KEYCHAIN_PASSWORD="$(uuidgen)$(uuidgen)"
           echo "::add-mask::${KEYCHAIN_PASSWORD}"
+          umask 077
 
           printf '%s' "${CERTIFICATE_BASE64}" | /usr/bin/base64 --decode > "${CERTIFICATE_PATH}"
           printf '%s' "${PROVISIONING_PROFILE_BASE64}" | /usr/bin/base64 --decode > "${PROFILE_PATH}"
@@ -93,12 +95,17 @@ jobs:
           security create-keychain -p "${KEYCHAIN_PASSWORD}" "${SIGNING_KEYCHAIN_PATH}"
           security set-keychain-settings -lut 21600 "${SIGNING_KEYCHAIN_PATH}"
           security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${SIGNING_KEYCHAIN_PATH}"
-          security import "${CERTIFICATE_PATH}" \
+          /usr/bin/openssl pkcs12 \
+            -in "${CERTIFICATE_PATH}" \
+            -passin env:CERTIFICATE_PASSWORD \
+            -nodes \
+            -out "${IDENTITY_PEM_PATH}"
+          security import "${IDENTITY_PEM_PATH}" \
             -k "${SIGNING_KEYCHAIN_PATH}" \
-            -P "${CERTIFICATE_PASSWORD}" \
-            -f pkcs12 \
+            -f pemseq \
             -x \
             -T /usr/bin/codesign
+          rm -f "${IDENTITY_PEM_PATH}"
           security set-key-partition-list \
             -S apple-tool:,apple:,codesign: \
             -s \
@@ -233,6 +240,7 @@ jobs:
             "${RUNNER_TEMP}/signing-profile.mobileprovision" \
             "${RUNNER_TEMP}/signing-profile.plist" \
             "${RUNNER_TEMP}/signing-entitlements.plist" \
+            "${RUNNER_TEMP}/signing-identity.pem" \
             "${RUNNER_TEMP}/profile-certificate-hashes.txt"
 
       - name: Upload unsigned IPA
